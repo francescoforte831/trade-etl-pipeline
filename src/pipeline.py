@@ -95,10 +95,54 @@ def load_and_clean_trades(config):
     logger.info(f"Trades cleaning complete. Current shape: {df.shape}")
     return df
 
+def join_counterparty_and_flag_discrepancies(trades_df, config):
+    """Join with counterparty_fills and flag discrepancies."""
+    counterparty_path = config['paths']['counterparty_fills']
+    if not os.path.exists(counterparty_path):
+        raise FileNotFoundError(f"Counterparty file not found: {counterparty_path}")
+    
+    cp_df = pd.read_csv(counterparty_path)
+    logger.info(f"Loaded {len(cp_df)} counterparty records")
+    
+    # Rename for joining
+    cp_df = cp_df.rename(columns={'our_trade_id': 'trade_id'})
+    
+    # Merge on trade_id
+    merged = trades_df.merge(cp_df, on='trade_id', how='left', suffixes=('', '_cp'))
+    
+    # Flag discrepancies
+    price_tolerance = config['validation']['price_tolerance']
+    
+    # counterparty_confirmed = True only if we have a match
+    merged['counterparty_confirmed'] = merged['price_cp'].notna()
+    
+    # Calculate price difference only when counterparty exists
+    merged['price_diff'] = abs(merged['price'] - merged['price_cp'])
+    
+    # Discrepancy only when there is a counterparty match AND (price diff > tolerance OR quantity mismatch)
+    # If no counterparty, discrepancy_flag = False (but counterparty_confirmed = False)
+    merged['discrepancy_flag'] = merged['counterparty_confirmed'] & (
+        (merged['price_diff'] > price_tolerance) |
+        (merged['quantity'] != merged['quantity_cp'])
+    )
+    
+    # Clean up columns for final output (keep only what we need)
+    final_columns = ['trade_id', 'timestamp_utc', 'symbol', 'quantity', 'price', 
+                     'buyer_id', 'seller_id', 'counterparty_confirmed', 'discrepancy_flag']
+    merged = merged[final_columns].copy()
+    
+    logger.info(f"After counterparty join: {len(merged)} records")
+    logger.info(f"Discrepancies found: {merged['discrepancy_flag'].sum()}")
+    logger.info(f"Counterparty confirmed: {merged['counterparty_confirmed'].sum()}")
+    
+    return merged
+
 def main():
     config = load_config()
     logger.info("Starting ETL pipeline")
     logger.info("Config loaded successfully")
+    logger.info(f"Price rounding set to {config['validation']['round_price_to']} decimals")
+
     
     # Load valid symbols
     valid_symbols = load_symbols(config)
@@ -106,7 +150,8 @@ def main():
     # Load and clean trades
     trades_df = load_and_clean_trades(config)
     
-    logger.info(f"Price rounding set to {config['validation']['round_price_to']} decimals")
-
+    # Join counterparty and flag discrepancies
+    cleaned_trades = join_counterparty_and_flag_discrepancies(trades_df, config)
+    
 if __name__ == "__main__":
     main()
