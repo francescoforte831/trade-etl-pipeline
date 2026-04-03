@@ -25,6 +25,7 @@ Pipeline designed to extract, transform, and load simulated trade data with data
 - Prices are rounded to exactly two decimal places.
 - Duplicate trade_ids are deduplicated, keeping only the first occurrence.
 - Discrepancies are flagged exactly as specified: price difference > $0.01 OR quantity mismatch (when a counterparty record exists).
+- Symbol mismatch between trades and counterparty is also flagged as a discrepancy.
 - Trades with discrepancies are kept in `cleaned_trades.json` with `discrepancy_flag: true` and also logged in `exceptions_report.json`.
 - Trades without any counterparty record stay in `cleaned_trades.json` with `counterparty_confirmed: false` and `discrepancy_flag: false`.
 - Records with missing quantity, missing price, or invalid symbols are sent only to `exceptions_report.json`.
