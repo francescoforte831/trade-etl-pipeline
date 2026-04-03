@@ -9,21 +9,22 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from src.pipeline import load_and_clean_trades
 
-# Mock config for testing
+# Mock config for testing (now matches current pipeline)
 test_config = {
     'paths': {
-        'trades': 'data/trades.csv'  # not actually used in unit test
+        'trades': 'data/trades.csv'
     },
     'validation': {
         'round_price_to': 2,
-        'filter_status': ["CANCELLED"]
+        'filter_status': ["CANCELLED"],
+        'required_fields_trades': ["trade_id", "symbol", "quantity", "price", "buyer_id", "seller_id"]
     }
 }
 
 def test_load_and_clean_trades_filters_cancelled():
     # Create small test dataframe
     test_data = """trade_id,timestamp,symbol,quantity,price,buyer_id,seller_id,trade_status
-TRD001,2024-01-15T10:00:00, AAPL,100,150.5,BUY1,SEL1,EXECUTED
+TRD001,2024-01-15T10:00:00,AAPL,100,150.5,BUY1,SEL1,EXECUTED
 TRD002,2024-01-15T11:00:00,MSFT,200,250.0,BUY2,SEL2,CANCELLED
 TRD003,2024-01-15T12:00:00,GOOGL,300,350.75,BUY3,SEL3,EXECUTED
 """

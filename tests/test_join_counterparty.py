@@ -9,13 +9,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from src.pipeline import join_counterparty_and_flag_discrepancies
 
-# Mock config for testing
+# Mock config for testing (now matches current pipeline)
 test_config = {
     'paths': {
-        'counterparty_fills': 'data/counterparty_fills.csv'  # not actually used in unit test
+        'counterparty_fills': 'data/counterparty_fills.csv'
     },
     'validation': {
-        'price_tolerance': 0.01
+        'price_tolerance': 0.01,
+        'required_fields_counterparty': ["our_trade_id", "symbol", "quantity", "price"]
     }
 }
 
@@ -43,24 +44,25 @@ EXT005,TRD005,2024-01-15T14:00:00,NVDA,500,300.00,CP5    # no match in trades
     pd.read_csv = lambda x: cp_df if 'counterparty' in str(x).lower() else trades_df
 
     try:
-        result = join_counterparty_and_flag_discrepancies(trades_df, test_config)
+        # Now returns (cleaned, full_merged)
+        cleaned, _ = join_counterparty_and_flag_discrepancies(trades_df, test_config)
 
-        assert len(result) == 4, f"Expected 4 records, got {len(result)}"
+        assert len(cleaned) == 4, f"Expected 4 records, got {len(cleaned)}"
 
         # Check specific cases
-        trd001 = result[result['trade_id'] == 'TRD001'].iloc[0]
+        trd001 = cleaned[cleaned['trade_id'] == 'TRD001'].iloc[0]
         assert trd001['counterparty_confirmed'] == True
         assert trd001['discrepancy_flag'] == False   # exact match
 
-        trd002 = result[result['trade_id'] == 'TRD002'].iloc[0]
+        trd002 = cleaned[cleaned['trade_id'] == 'TRD002'].iloc[0]
         assert trd002['counterparty_confirmed'] == True
         assert trd002['discrepancy_flag'] == True    # price diff > 0.01
 
-        trd003 = result[result['trade_id'] == 'TRD003'].iloc[0]
+        trd003 = cleaned[cleaned['trade_id'] == 'TRD003'].iloc[0]
         assert trd003['counterparty_confirmed'] == True
         assert trd003['discrepancy_flag'] == True    # quantity mismatch
 
-        trd004 = result[result['trade_id'] == 'TRD004'].iloc[0]
+        trd004 = cleaned[cleaned['trade_id'] == 'TRD004'].iloc[0]
         assert trd004['counterparty_confirmed'] == False
         assert trd004['discrepancy_flag'] == False   # no counterparty = no discrepancy flag
 
