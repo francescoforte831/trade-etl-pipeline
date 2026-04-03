@@ -1,0 +1,14 @@
+validation:
+  price_tolerance: 0.01 # Price difference > this flags discrepancy
+  quantity_tolerance: 0 # Exact match required for quantity
+  round_price_to: 2
+  filter_status: ["CANCELLED"] # Trades with these statuses are filtered out
+  required_fields_trades: ["trade_id", "symbol", "quantity", "price", "buyer_id", "seller_id"]
+  required_fields_counterparty: ["our_trade_id", "symbol", "quantity", "price"]
+
+paths:
+  trades: data/trades.csv
+  counterparty_fills: data/counterparty_fills.csv
+  symbols_reference: data/symbols_reference.csv
+  output_cleaned: output/cleaned_trades.json
+  output_exceptions: output/exceptions_report.json
