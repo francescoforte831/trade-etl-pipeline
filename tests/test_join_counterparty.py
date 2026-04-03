@@ -70,5 +70,31 @@ EXT005,TRD005,2024-01-15T14:00:00,NVDA,500,300.00,CP5    # no match in trades
         # Restore original function
         pd.read_csv = original_read_csv
 
+def test_counterparty_confirmed_always_has_discrepancy_when_cp_fields_missing():
+    """Regression test for the bug where counterparty_confirmed=True but discrepancy_flag=False."""
+    trades_data = """trade_id,timestamp_utc,symbol,quantity,price,buyer_id,seller_id
+TRD001715,2024-01-15T15:05:14Z,META,6126,359.85,BUY22,SEL25
+TRD002476,2024-01-15T15:43:34Z,AAPL,3702,521.54,BUY45,SEL42
+"""
+    trades_df = pd.read_csv(StringIO(trades_data))
+
+    cp_data = """external_ref_id,our_trade_id,timestamp,symbol,quantity,price,counterparty_id
+EXT001161,TRD001715,2024-01-15T18:25:00,META,,,CP7
+EXT001696,TRD002476,2024-01-15T18:20:00,AAPL,,,CP6
+"""
+    cp_df = pd.read_csv(StringIO(cp_data))
+
+    original_read_csv = pd.read_csv
+    pd.read_csv = lambda x: cp_df if 'counterparty' in str(x).lower() else trades_df
+
+    try:
+        cleaned, _ = join_counterparty_and_flag_discrepancies(trades_df, test_config)
+        for trade_id in ['TRD001715', 'TRD002476']:
+            row = cleaned[cleaned['trade_id'] == trade_id].iloc[0]
+            assert row['counterparty_confirmed'] == True
+            assert row['discrepancy_flag'] == True, f"TRD {trade_id} should have discrepancy_flag=True"
+    finally:
+        pd.read_csv = original_read_csv
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -56,22 +56,18 @@ def load_and_clean_trades(config):
     df = pd.read_csv(trades_path)
     logger.info(f"Loaded {len(df)} raw trade records")
     
-    # Required columns check
     required = config['validation']['required_fields_trades']
     missing = [col for col in required if col not in df.columns]
     if missing:
         raise ValueError(f"Missing required columns in trades.csv: {missing}")
     
-    # Deduplicate
     df = df.drop_duplicates(subset=['trade_id'], keep='first')
     logger.info(f"After deduplication: {len(df)} records")
     
-    # Filter cancelled
     filter_status = config['validation']['filter_status']
     df = df[~df['trade_status'].isin(filter_status)]
     logger.info(f"After filtering cancelled trades: {len(df)} records")
     
-    # Clean
     df['timestamp_utc'] = df['timestamp'].apply(normalize_timestamp)
     df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
     df['price'] = pd.to_numeric(df['price'], errors='coerce').round(config['validation']['round_price_to'])
@@ -88,7 +84,6 @@ def join_counterparty_and_flag_discrepancies(trades_df, config):
     cp_df = pd.read_csv(counterparty_path)
     logger.info(f"Loaded {len(cp_df)} counterparty records")
     
-    # Required columns check
     required_cp = config['validation']['required_fields_counterparty']
     missing = [col for col in required_cp if col not in cp_df.columns]
     if missing:
@@ -100,13 +95,13 @@ def join_counterparty_and_flag_discrepancies(trades_df, config):
     price_tolerance = config['validation']['price_tolerance']
     merged['counterparty_confirmed'] = merged['external_ref_id'].notna()
     
-    # Exact spec logic + symbol mismatch (as requested)
-    price_diff = abs(merged['price'] - merged['price_cp'])
-    quantity_match = (merged['quantity'] == merged['quantity_cp']) | merged['quantity_cp'].isna()
-    symbol_match = (merged['symbol'] == merged['symbol_cp']) | merged['symbol_cp'].isna()
+    # FIXED: missing price/quantity/symbol in counterparty now forces discrepancy_flag=True
+    price_match = pd.notna(merged['price_cp']) & (abs(merged['price'] - merged['price_cp']) <= price_tolerance)
+    quantity_match = pd.notna(merged['quantity_cp']) & (merged['quantity'] == merged['quantity_cp'])
+    symbol_match = pd.notna(merged['symbol_cp']) & (merged['symbol'] == merged['symbol_cp'])
     
     merged['discrepancy_flag'] = merged['counterparty_confirmed'] & (
-        (price_diff > price_tolerance) | ~quantity_match | ~symbol_match
+        ~price_match | ~quantity_match | ~symbol_match
     )
     
     final_columns = ['trade_id', 'timestamp_utc', 'symbol', 'quantity', 'price', 
@@ -116,7 +111,7 @@ def join_counterparty_and_flag_discrepancies(trades_df, config):
     
     logger.info(f"After counterparty join: {len(cleaned)} records")
     logger.info(f"Discrepancies flagged: {cleaned['discrepancy_flag'].sum()}")
-    return cleaned, merged  # return merged for accurate exception details
+    return cleaned, merged
 
 def generate_outputs(cleaned_trades, full_merged, config, valid_symbols):
     os.makedirs('output', exist_ok=True)
@@ -146,7 +141,7 @@ def generate_outputs(cleaned_trades, full_merged, config, valid_symbols):
             "raw_data": row.to_dict()
         })
     
-    # Missing numeric data
+    # Missing numeric data in trades
     missing = cleaned_trades[cleaned_trades['price'].isna() | cleaned_trades['quantity'].isna()]
     for _, row in missing.iterrows():
         fields = []
@@ -160,17 +155,24 @@ def generate_outputs(cleaned_trades, full_merged, config, valid_symbols):
             "raw_data": row.to_dict()
         })
     
-    # Data discrepancies (exact spec + symbol mismatch)
+    # Data discrepancies (now correctly catches missing cp fields)
     discrep = valid_trades[valid_trades['discrepancy_flag']]
     for _, row in discrep.iterrows():
         cp_row = full_merged[full_merged['trade_id'] == row['trade_id']].iloc[0]
         reasons = []
-        if abs(row['price'] - cp_row['price_cp']) > config['validation']['price_tolerance']:
+        if pd.isna(cp_row['price_cp']):
+            reasons.append("missing price in counterparty fill")
+        elif abs(row['price'] - cp_row['price_cp']) > config['validation']['price_tolerance']:
             reasons.append("price difference > $0.01")
-        if pd.notna(cp_row['quantity_cp']) and row['quantity'] != cp_row['quantity_cp']:
+        if pd.isna(cp_row['quantity_cp']):
+            reasons.append("missing quantity in counterparty fill")
+        elif row['quantity'] != cp_row['quantity_cp']:
             reasons.append("quantity mismatch")
-        if pd.notna(cp_row['symbol_cp']) and row['symbol'] != cp_row['symbol_cp']:
+        if pd.isna(cp_row['symbol_cp']):
+            reasons.append("missing symbol in counterparty fill")
+        elif row['symbol'] != cp_row['symbol_cp']:
             reasons.append("symbol mismatch")
+        
         details = "Discrepancy: " + ", ".join(reasons) if reasons else "Data discrepancy with counterparty"
         
         exceptions.append({
