@@ -1,3 +1,4 @@
 pandas
 pyyaml
 python-dateutil
+pytest

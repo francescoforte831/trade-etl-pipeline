@@ -69,18 +69,6 @@ def main():
     valid_symbols = load_symbols(config)
     
     logger.info(f"Price rounding set to {config['validation']['round_price_to']} decimals")
-    
-    # Test timestamp normalization
-    test_times = [
-        "2024-01-15T15:59:39.000Z",
-        "1/15/2024 12:17:17",
-        "1705351086",
-        "2024-01-15T14:42:31.000Z",
-        "1/15/2024 9:55:29"
-    ]
-    for t in test_times:
-        normalized = normalize_timestamp(t)
-        logger.info(f"Original: {t} -> Normalized: {normalized}")
 
 if __name__ == "__main__":
     main()
