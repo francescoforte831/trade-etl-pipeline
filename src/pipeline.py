@@ -39,7 +39,7 @@ def normalize_timestamp(ts):
         else:
             # Assume input without tz is already UTC
             dt = dt.replace(tzinfo=None)
-        
+            
         return dt.isoformat() + 'Z'
     
     except Exception as e:
@@ -60,6 +60,41 @@ def load_symbols(config):
     logger.info(f"Loaded {len(valid_symbols)} active symbols from reference data")
     return valid_symbols
 
+def load_and_clean_trades(config):
+    """Load trades.csv, apply basic cleaning and validation."""
+    trades_path = config['paths']['trades']
+    if not os.path.exists(trades_path):
+        raise FileNotFoundError(f"Trades file not found: {trades_path}")
+    
+    df = pd.read_csv(trades_path)
+    logger.info(f"Loaded {len(df)} raw trade records")
+    
+    # Deduplicate based on trade_id (keep first occurrence)
+    df = df.drop_duplicates(subset=['trade_id'], keep='first')
+    logger.info(f"After deduplication: {len(df)} records")
+    
+    # Filter cancelled trades using config
+    filter_status = config['validation']['filter_status']
+    df = df[~df['trade_status'].isin(filter_status)]
+    logger.info(f"After filtering cancelled trades: {len(df)} records")
+    
+    # Basic cleaning
+    df['timestamp_utc'] = df['timestamp'].apply(normalize_timestamp)
+    
+    # Convert quantity and price
+    df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
+    df['price'] = pd.to_numeric(df['price'], errors='coerce')
+    
+    # Round price
+    round_to = config['validation']['round_price_to']
+    df['price'] = df['price'].round(round_to)
+    
+    # Symbol validation - uppercase for matching
+    df['symbol'] = df['symbol'].astype(str).str.strip().str.upper()
+    
+    logger.info(f"Trades cleaning complete. Current shape: {df.shape}")
+    return df
+
 def main():
     config = load_config()
     logger.info("Starting ETL pipeline")
@@ -67,6 +102,9 @@ def main():
     
     # Load valid symbols
     valid_symbols = load_symbols(config)
+    
+    # Load and clean trades
+    trades_df = load_and_clean_trades(config)
     
     logger.info(f"Price rounding set to {config['validation']['round_price_to']} decimals")
 
