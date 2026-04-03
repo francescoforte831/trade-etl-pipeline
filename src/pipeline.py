@@ -46,10 +46,28 @@ def normalize_timestamp(ts):
         logger.warning(f"Could not parse timestamp: {ts} - Error: {e}")
         return None
 
+def load_symbols(config):
+    """Load symbols reference and return set of valid active symbols."""
+    symbols_path = config['paths']['symbols_reference']
+    if not os.path.exists(symbols_path):
+        raise FileNotFoundError(f"Symbols file not found: {symbols_path}")
+    
+    df = pd.read_csv(symbols_path)
+    # Filter only active symbols
+    active_symbols = df[df['is_active'] == True]['symbol'].str.strip().str.upper().tolist()
+    valid_symbols = set(active_symbols)
+    
+    logger.info(f"Loaded {len(valid_symbols)} active symbols from reference data")
+    return valid_symbols
+
 def main():
     config = load_config()
     logger.info("Starting ETL pipeline")
     logger.info("Config loaded successfully")
+    
+    # Load valid symbols
+    valid_symbols = load_symbols(config)
+    
     logger.info(f"Price rounding set to {config['validation']['round_price_to']} decimals")
     
     # Test timestamp normalization
