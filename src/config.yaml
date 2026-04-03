@@ -1,6 +1,5 @@
 validation:
   price_tolerance: 0.01 # Price difference > this flags discrepancy
-  quantity_tolerance: 0 # Exact match required for quantity
   round_price_to: 2
   filter_status: ["CANCELLED"] # Trades with these statuses are filtered out
   required_fields_trades: ["trade_id", "symbol", "quantity", "price", "buyer_id", "seller_id"]

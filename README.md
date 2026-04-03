@@ -20,13 +20,15 @@ Pipeline designed to extract, transform, and load simulated trade data with data
 5. Output files will appear in the output/ directory.
 
 ## Assumptions
-- Only active symbols from the symbols reference are accepted
-- Cancelled trades are removed from the cleaned output
-- Prices are rounded to two decimal places
-- Duplicate trade_ids keep only the first record
-- Discrepancies are flagged when price differs by more than 0.01 or quantity does not match
-- Missing values in required fields cause the record to go to the exceptions report
-- Timestamps are converted to UTC ISO 8601 format
+- Only active symbols from `symbols_reference.csv` are accepted in `cleaned_trades.json`; invalid symbols go to exceptions.
+- Cancelled trades are completely filtered out and do not appear in cleaned_trades.json.
+- Prices are rounded to exactly two decimal places.
+- Duplicate trade_ids are deduplicated, keeping only the first occurrence.
+- Discrepancies are flagged exactly as specified: price difference > $0.01 OR quantity mismatch (when a counterparty record exists).
+- Trades with discrepancies are kept in `cleaned_trades.json` with `discrepancy_flag: true` and also logged in `exceptions_report.json`.
+- Trades without any counterparty record stay in `cleaned_trades.json` with `counterparty_confirmed: false` and `discrepancy_flag: false`.
+- Records with missing quantity, missing price, or invalid symbols are sent only to `exceptions_report.json`.
+- Timestamps from all formats (ISO, US date, Unix) are normalized to UTC ISO 8601 with Z suffix.
 
 ## Design decisions
 - Used pandas for efficient handling of large CSV files
